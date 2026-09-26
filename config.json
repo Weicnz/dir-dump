@@ -1,0 +1,36 @@
+{
+  "strategies": {
+    "current_dir": {
+      "enabled": true,
+      "include_parent": true,
+      "include_siblings": true,
+      "include_recent_subdirs": true,
+      "include_common_dirs": true,
+      "include_favorites": true,
+      "max_siblings": 8,
+      "max_recent_subdirs": 6
+    }
+  },
+  "favorites": [
+    {
+      "name": "Desktop",
+      "path": "C:\\Users\\Administrator\\Desktop"
+    },
+    {
+      "name": "Documents",
+      "path": "C:\\Users\\Administrator\\Documents"
+    },
+    {
+      "name": "Downloads",
+      "path": "C:\\Users\\Administrator\\Downloads"
+    },
+    {
+      "name": "Pictures",
+      "path": "C:\\Users\\Administrator\\Pictures"
+    }
+  ],
+  "wheel": {
+    "radius": 150,
+    "inner_radius": 50
+  }
+}
