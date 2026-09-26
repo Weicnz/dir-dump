@@ -56,8 +56,9 @@ class StrategyOptionsWidget(QWidget):
             layout.addWidget(cb)
 
         int_options = [
+            ("recent_days", "最近使用天数 (3-7)"),
+            ("max_recent_subdirs", "当前目录子目录最大数量"),
             ("max_siblings", "同级目录最大数量"),
-            ("max_recent_subdirs", "最近子目录最大数量"),
         ]
         self._int_spins: dict[str, QSpinBox] = {}
         int_group = QGroupBox("数量限制")
@@ -66,8 +67,12 @@ class StrategyOptionsWidget(QWidget):
             row = QHBoxLayout()
             row.addWidget(QLabel(label))
             spin = QSpinBox()
-            spin.setRange(1, 50)
-            spin.setValue(int(self._config.get(key, 8)))
+            if key == "recent_days":
+                spin.setRange(1, 30)
+                spin.setValue(int(self._config.get(key, 5)))
+            else:
+                spin.setRange(1, 50)
+                spin.setValue(int(self._config.get(key, 8)))
             self._int_spins[key] = spin
             row.addWidget(spin)
             int_layout.addLayout(row)

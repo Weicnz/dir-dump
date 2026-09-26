@@ -165,6 +165,7 @@ class WheelController(QObject):
                 continue
             cfg_with_favs = dict(cfg)
             cfg_with_favs["favorites"] = self._config.get_favorites()
+            cfg_with_favs["history"] = self._config.get_history()
             items.extend(strategy.get_recommendations(current_dir, cfg_with_favs))
 
         if not items:
@@ -190,6 +191,7 @@ class WheelController(QObject):
             path = self._wheel.commit()
             if path:
                 open_in_explorer(path)
+                self._config.add_history(path)
                 selected = True
         self.hide_wheel()
         return selected

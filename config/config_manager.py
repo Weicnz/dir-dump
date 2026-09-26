@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import time
 from typing import Any
 
 CONFIG_FILE = pathlib.Path(__file__).resolve().parent.parent / "config.json"
@@ -14,8 +15,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "include_recent_subdirs": True,
             "include_common_dirs": True,
             "include_favorites": True,
-            "max_siblings": 8,
-            "max_recent_subdirs": 6,
+            "recent_days": 5,
+            "max_siblings": 3,
+            "max_recent_subdirs": 8,
         }
     },
     "favorites": [
@@ -24,11 +26,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         {"name": "Downloads", "path": str(pathlib.Path.home() / "Downloads")},
         {"name": "Pictures", "path": str(pathlib.Path.home() / "Pictures")},
     ],
+    "history": [],
     "wheel": {
         "radius": 150,
         "inner_radius": 50,
     },
 }
+
+HISTORY_MAX_ENTRIES = 100
 
 
 class ConfigManager:
@@ -93,6 +98,23 @@ class ConfigManager:
 
     def set_favorites(self, favorites: list[dict[str, str]]) -> None:
         self._data["favorites"] = favorites
+
+    def get_history(self) -> list[dict[str, Any]]:
+        return self._data.get("history", [])
+
+    def add_history(self, path: str) -> None:
+        history = self._data.setdefault("history", [])
+        now = time.time()
+        norm = os.path.normcase(os.path.normpath(path))
+        history = [h for h in history if os.path.normcase(os.path.normpath(h.get("path", ""))) != norm]
+        history.insert(0, {"path": path, "time": now})
+        if len(history) > HISTORY_MAX_ENTRIES:
+            history = history[:HISTORY_MAX_ENTRIES]
+        self._data["history"] = history
+        try:
+            self.save()
+        except OSError:
+            pass
 
     @property
     def wheel_radius(self) -> int:

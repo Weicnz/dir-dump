@@ -7,6 +7,7 @@
       "include_recent_subdirs": true,
       "include_common_dirs": true,
       "include_favorites": true,
+      "recent_days": 5,
       "max_siblings": 8,
       "max_recent_subdirs": 6
     }
@@ -32,5 +33,11 @@
   "wheel": {
     "radius": 150,
     "inner_radius": 50
-  }
+  },
+  "history": [
+    {
+      "path": "D:\\Work",
+      "time": 1790398069.2121434
+    }
+  ]
 }
