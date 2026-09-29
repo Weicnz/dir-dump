@@ -5,15 +5,15 @@ import sys
 from ctypes import wintypes
 
 import pythoncom
-from PySide6.QtCore import QObject, QPoint, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QCursor
-from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
+from PySide6.QtCore import QObject, QPoint, QRectF, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QAction, QBrush, QColor, QCursor, QPainter, QRadialGradient
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QStyle, QSystemTrayIcon
 
 from config.config_manager import ConfigManager
 from strategies import get_registry
 from ui.wheel_menu import WheelMenu
 from ui.settings_dialog import SettingsDialog
-from utils.explorer import get_active_explorer_path, is_explorer_foreground, open_in_explorer
+from utils.explorer import get_active_path, is_supported_foreground, open_in_explorer
 
 WH_MOUSE_LL = 14
 WM_RBUTTONDOWN = 0x0204
@@ -21,6 +21,8 @@ WM_RBUTTONUP = 0x0205
 WM_MOUSEMOVE = 0x0200
 MOUSEEVENTF_RIGHTDOWN = 0x0008
 MOUSEEVENTF_RIGHTUP = 0x0010
+PRESS_HOLD_MS = 200  # 右键按住多少毫秒后弹出轮盘
+SPLASH_MS = 3000     # 开机提示窗口显示时长（毫秒）
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -87,7 +89,7 @@ class MouseHook(QThread):
                 info = ctypes.cast(lParam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
                 x, y = info.pt.x, info.pt.y
                 if wParam == WM_RBUTTONDOWN:
-                    fg = is_explorer_foreground()
+                    fg = is_supported_foreground()
                     if fg:
                         self._suppress_right = True
                         self.rightButtonDown.emit(x, y)
@@ -157,7 +159,7 @@ class WheelController(QObject):
         if self._wheel is not None:
             self.hide_wheel()
 
-        current_dir = get_active_explorer_path()
+        current_dir = get_active_path()
         if current_dir:
             # 记录当前访问的目录，作为后续按频次推荐的数据来源
             self._config.add_history(current_dir)
@@ -203,6 +205,61 @@ class WheelController(QObject):
         self._active = False
 
 
+class SplashWindow(QLabel):
+    """开机介绍窗口：淡蓝→白、边缘渐变虚化的柔光背景，居中文字，SPLASH_MS 后关闭。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setText(
+            '<div style="text-align:center;">'
+            '<div style="font-size:26px; font-weight:bold;'
+            ' letter-spacing:0px; color:#0b4a7a;">DIR Jumper</div>'
+            '<div style="font-size:15px; color:#2b6ca3; margin-top:26px;">'
+            '右键轻按 · 目录即达</div>'
+            '</div>'
+        )
+        self.setAlignment(Qt.AlignCenter)
+        self.setFixedSize(480, 320)
+        self.setWindowFlags(
+            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+        )
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            center = screen.availableGeometry().center()
+            self.move(
+                center.x() - self.width() // 2,
+                center.y() - self.height() // 2,
+            )
+        QTimer.singleShot(SPLASH_MS, self.close)
+
+    def paintEvent(self, event) -> None:
+        """绘制淡蓝→白、边缘完全虚化（无硬边界）的柔光背景，再交给基类画文字。"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # 单位圆内的径向渐变：由中心向外平滑递减，颜色渐变到白、alpha 逐渐虚化到无
+        gradient = QRadialGradient(0.0, 0.0, 1.0)
+        gradient.setColorAt(0.00, QColor(191, 224, 255, 255))  # #bfe0ff
+        gradient.setColorAt(0.50, QColor(198, 226, 255, 252))
+        gradient.setColorAt(0.68, QColor(214, 236, 255, 240))
+        gradient.setColorAt(0.82, QColor(230, 242, 255, 215))
+        gradient.setColorAt(0.91, QColor(245, 250, 255, 70))
+        gradient.setColorAt(0.97, QColor(255, 255, 255, 20))
+        gradient.setColorAt(1.00, QColor(255, 255, 255, 0))
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(gradient))
+        radius = min(self.width(), self.height()) / 2  # 正圆半径，取窗口较小边
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.scale(radius, radius)  # 单位圆 -> 正圆（不再随窗口拉伸）
+        painter.drawEllipse(QRectF(-1.0, -1.0, 2.0, 2.0))
+        painter.end()
+
+        super().paintEvent(event)
+
+
 class App(QApplication):
     def __init__(self, argv: list[str]) -> None:
         super().__init__(argv)
@@ -212,12 +269,21 @@ class App(QApplication):
         self._controller = WheelController(self._config)
         self._hook = MouseHook()
 
+        # 右键按住 PRESS_HOLD_MS 后弹出轮盘；提前松开则不弹出
+        self._press_timer = QTimer(self)
+        self._press_timer.setSingleShot(True)
+        self._press_timer.setInterval(PRESS_HOLD_MS)
+        self._press_timer.timeout.connect(self._show_wheel_at_cursor)
+
         self._hook.rightButtonDown.connect(self._on_right_down)
         self._hook.rightButtonUp.connect(self._on_right_up)
         self._hook.mouseMoved.connect(self._on_mouse_move)
 
         self._tray = self._create_tray()
         self._hook.start()
+
+        self._splash = SplashWindow()
+        self._splash.show()
 
     def _create_tray(self) -> QSystemTrayIcon:
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
@@ -244,7 +310,7 @@ class App(QApplication):
         return tray
 
     def _on_right_down(self, x: int, y: int) -> None:
-        QTimer.singleShot(0, self._show_wheel_at_cursor)
+        self._press_timer.start()
 
     def _show_wheel_at_cursor(self) -> None:
         # 钩子返回的是物理像素坐标，需转换为 Qt 的逻辑坐标，
@@ -257,6 +323,7 @@ class App(QApplication):
 
     def _on_right_up(self, x: int, y: int) -> None:
         def _do() -> None:
+            self._press_timer.stop()
             pos = QCursor.pos()
             selected = self._controller.commit_and_hide(pos.x(), pos.y())
             if not selected:

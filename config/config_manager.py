@@ -28,7 +28,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "path_styles": {},
     "history": [],
     "wheel": {
-        "radius": 150,
+        "radius": 200,
         "inner_radius": 50,
     },
 }
