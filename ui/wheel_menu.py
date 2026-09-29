@@ -3,7 +3,6 @@ from __future__ import annotations
 import html
 import math
 import os
-import zlib
 from pathlib import PureWindowsPath
 from typing import Optional
 
@@ -24,6 +23,11 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QWidget
 
 from strategies.base import DirectoryItem
+from ui.theme import (
+    WHEEL_HOVER_ALPHA,
+    WHEEL_RANK_COLORS,
+    WHEEL_RANK_LEVELS,
+)
 from utils.patterns import pattern_path
 
 GROW = 14          # 悬浮时扇形向外放大的像素
@@ -34,44 +38,6 @@ HINT_FONT_PT = 9   # 白条字号
 HINT_PADDING = 12  # 白条内左右留白
 HINT_SIBLINGS = 5  # 白条内同级目录展示条数（含目标本身）
 HINT_TAIL_SEGS = 3  # 判定“尾部相同”时比较的末段数（含条目名 + 最近两级上级）
-GROUP_GAP = 10.0   # 两组扇形之间的空隙（度）
-RADIUS_LEVELS = 5         # 优先级划分的半径档数
-RADIUS_LEVEL_STEP = 0.025  # 每降一档半径缩小的比例（档间差异较小）
-RADIUS_MIN_GAP = 12       # 扇形外沿与中心圆的最小间距（像素）
-
-# 固定在左侧区的分类（其它位置的高频目录）；其余分类都在右侧
-LEFT_CATEGORIES = {"global", "favorite"}
-
-# 固定调色板：以 #3964FE 蓝色为主色（9 档深浅），橙/紫/粉各 1 色作少量点缀
-PALETTE = [
-    QColor(47, 85, 222),     # 2F55DE 主色·深
-    QColor(57, 100, 254),    # 3964FE 主色
-    QColor(58, 92, 224),     # 3A5CE0 主色·深
-    QColor(172, 81, 24),     # AC5118 橙（点缀）
-    QColor(74, 116, 255),    # 4A74FF 主色·亮
-    QColor(42, 76, 200),     # 2A4CC8 主色·更深
-    QColor(76, 111, 232),    # 4C6FE8 主色·中
-    QColor(118, 62, 169),    # 763EA9 紫（点缀）
-    QColor(68, 104, 245),    # 4468F5 主色·中亮
-    QColor(91, 121, 240),    # 5B79F0 主色·浅
-    QColor(46, 80, 208),     # 2E50D0 主色·深
-    QColor(173, 64, 107),    # AD406B 粉（点缀）
-]
-
-
-def _color_for_path(path: str) -> QColor:
-    """按完整路径取色：同一目录始终同色，不同位置的同名目录可以不同色。"""
-    norm = os.path.normcase(os.path.normpath(path))
-    return PALETTE[zlib.crc32(norm.encode("utf-8")) % len(PALETTE)]
-
-
-def _color_for_item(item: DirectoryItem) -> QColor:
-    """优先使用条目自定义颜色，否则按路径取色。"""
-    if item.color:
-        color = QColor(item.color)
-        if color.isValid():
-            return color
-    return _color_for_path(item.path)
 
 
 def _path_parts(path: str) -> tuple[str, ...]:
@@ -122,7 +88,6 @@ class WheelMenu(QWidget):
         self._seg_indices: list[int] = []
         self._seg_mids: list[float] = []  # 第 k 个扇形的中心角（屏幕角度，度）
         self._seg_widths: list[float] = []  # 第 k 个扇形的角度跨度（度）
-        self._seg_radii: list[float] = []  # 第 k 个扇形的半径（按优先级缩放）
         self._icon_cache: dict[str, Optional[QPixmap]] = {}
         self._sibling_cache: dict[str, list[str]] = {}
 
@@ -158,6 +123,8 @@ class WheelMenu(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
+        # 分层（半透明）窗口默认不提供光标，Windows 上指针会“透明/消失”，显式指定
+        self.setCursor(Qt.ArrowCursor)
 
         self.move(center_pos.x() - self._center.x(), center_pos.y() - self._center.y())
 
@@ -166,49 +133,27 @@ class WheelMenu(QWidget):
         return len(self._items)
 
     def _layout(self) -> list[tuple[int, float, float]]:
-        """计算各扇形的角度范围（屏幕角度，度，0=右/90=下/180=左）。
+        """计算各扇形的角度范围（屏幕角度，度，0=右/90=下/180=左/270=上）。
 
-        全局组固定在左侧区（以 180° 为中心），子目录组在右侧，两组之间留空隙。
+        唯一顺序契约：条目索引即优先级，索引 0 的扇形中心固定在正上方
+        （270°），随后按索引递增沿顺时针方向等宽铺满整圈。
         """
         n = self.item_count
         if n == 0:
             return []
-        left = [i for i, it in enumerate(self._items) if it.category in LEFT_CATEGORIES]
-        right = [i for i, it in enumerate(self._items) if it.category not in LEFT_CATEGORIES]
+        step = 360.0 / n
+        first_start = 270.0 - step / 2
+        return [
+            (i, first_start + i * step, first_start + (i + 1) * step)
+            for i in range(n)
+        ]
 
-        segments: list[tuple[int, float, float]] = []
-
-        def place(indices: list[int], start: float, end: float) -> None:
-            m = len(indices)
-            if m == 0:
-                return
-            step = (end - start) / m
-            for j, idx in enumerate(indices):
-                segments.append((idx, start + j * step, start + (j + 1) * step))
-
-        if not left or not right:
-            # 只有一组时铺满整圈
-            place(left or right, 0.0, 360.0)
-            return segments
-
-        gap = GROUP_GAP
-        w = (360.0 - 2 * gap) / n
-        s_left = len(left) * w
-        s_right = len(right) * w
-        place(left, 180.0 - s_left / 2, 180.0 + s_left / 2)
-        right_start = 180.0 + s_left / 2 + gap
-        place(right, right_start, right_start + s_right)
-        return segments
-
-    def _radius_for_rank(self, item_idx: int) -> float:
-        """按优先级把条目分成 RADIUS_LEVELS 档，越靠前半径越大；档间差异较小。"""
-        base = float(self._radius)
+    def _rank_for_index(self, item_idx: int) -> int:
+        """条目索引 -> 优先级档（0 = 最高）；用于颜色深浅阶梯。"""
         n = len(self._items)
         if n <= 1:
-            return base
-        level = min(RADIUS_LEVELS - 1, item_idx * RADIUS_LEVELS // n)
-        factor = 1.0 - RADIUS_LEVEL_STEP * level
-        return max(base * factor, self._inner_radius + RADIUS_MIN_GAP)
+            return 0
+        return min(WHEEL_RANK_LEVELS - 1, item_idx * WHEEL_RANK_LEVELS // n)
 
     def _build_seg_paths(self) -> None:
         self._seg_paths.clear()
@@ -216,14 +161,14 @@ class WheelMenu(QWidget):
         self._seg_indices.clear()
         self._seg_mids.clear()
         self._seg_widths.clear()
-        self._seg_radii.clear()
+
+        r = float(self._radius)
+        gr = r + GROW
+        rect = QRectF(self._center.x() - r, self._center.y() - r, r * 2, r * 2)
+        grect = QRectF(self._center.x() - gr, self._center.y() - gr, gr * 2, gr * 2)
 
         for idx, phi_start, phi_end in self._layout():
             sweep = max(phi_end - phi_start, 0.01)
-            r = self._radius_for_rank(idx)
-            gr = r + GROW
-            rect = QRectF(self._center.x() - r, self._center.y() - r, r * 2, r * 2)
-            grect = QRectF(self._center.x() - gr, self._center.y() - gr, gr * 2, gr * 2)
 
             path = QPainterPath()
             path.moveTo(self._center)
@@ -240,7 +185,6 @@ class WheelMenu(QWidget):
             self._seg_indices.append(idx)
             self._seg_mids.append((phi_start + phi_end) / 2)
             self._seg_widths.append(sweep)
-            self._seg_radii.append(r)
 
     def showEvent(self, event) -> None:
         self._build_seg_paths()
@@ -347,17 +291,18 @@ class WheelMenu(QWidget):
             self._build_seg_paths()
 
         for k, item_idx in enumerate(self._seg_indices):
-            base = _color_for_item(self._items[item_idx])
+            base = QColor(WHEEL_RANK_COLORS[self._rank_for_index(item_idx)])
             is_h = k == self._highlighted
             path = self._grow_paths[k] if is_h else self._seg_paths[k]
-            outer_r = self._seg_radii[k] + (GROW if is_h else 0)
+            outer_r = self._radius + (GROW if is_h else 0)
             if is_h:
-                fill = base.lighter(150)
-                fill.setAlpha(215)
-                stroke = QColor(255, 255, 255, 240)
+                # 悬浮：保持档位色相、提到全实，配合外扩与亮白描边凸显
+                fill = QColor(base.red(), base.green(), base.blue(), WHEEL_HOVER_ALPHA)
+                stroke = QColor(255, 255, 255, 245)
                 width = 2
             else:
-                fill = QColor(base.red(), base.green(), base.blue(), 170)
+                # 非悬浮：直接用档位色（深浅/虚实已编码优先级）
+                fill = QColor(base)
                 stroke = QColor(255, 255, 255, 120)
                 width = 1
             # 填充与描边都随半径向外渐变虚化，外沿不出现硬边
@@ -388,9 +333,8 @@ class WheelMenu(QWidget):
         for k, item_idx in enumerate(self._seg_indices):
             item = self._items[item_idx]
             is_h = k == self._highlighted
-            base_r = self._seg_radii[k]
             label_radius = (
-                self._inner_radius + (base_r + GROW if is_h else base_r)
+                self._inner_radius + (self._radius + GROW if is_h else self._radius)
             ) / 2
             seg_mid = math.radians(self._seg_mids[k])
             lx = self._center.x() + label_radius * math.cos(seg_mid)

@@ -6,11 +6,12 @@ from ctypes import wintypes
 
 import pythoncom
 from PySide6.QtCore import QObject, QPoint, QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QBrush, QColor, QCursor, QPainter, QRadialGradient
+from PySide6.QtGui import QAction, QBrush, QCursor, QPainter, QRadialGradient
 from PySide6.QtWidgets import QApplication, QLabel, QMenu, QStyle, QSystemTrayIcon
 
 from config.config_manager import ConfigManager
 from strategies import get_registry
+from ui.theme import SPLASH_GLOW_STOPS, SPLASH_SUBTITLE_HEX, SPLASH_TITLE_HEX
 from ui.wheel_menu import WheelMenu
 from ui.settings_dialog import SettingsDialog
 from utils.explorer import get_active_path, is_supported_foreground, open_in_explorer
@@ -212,9 +213,9 @@ class SplashWindow(QLabel):
         super().__init__()
         self.setText(
             '<div style="text-align:center;">'
-            '<div style="font-size:26px; font-weight:bold;'
-            ' letter-spacing:0px; color:#0b4a7a;">DIR Jumper</div>'
-            '<div style="font-size:15px; color:#2b6ca3; margin-top:26px;">'
+            f'<div style="font-size:26px; font-weight:bold;'
+            f' letter-spacing:0px; color:{SPLASH_TITLE_HEX};">DIR Jumper</div>'
+            f'<div style="font-size:15px; color:{SPLASH_SUBTITLE_HEX}; margin-top:26px;">'
             '右键轻按 · 目录即达</div>'
             '</div>'
         )
@@ -241,13 +242,8 @@ class SplashWindow(QLabel):
 
         # 单位圆内的径向渐变：由中心向外平滑递减，颜色渐变到白、alpha 逐渐虚化到无
         gradient = QRadialGradient(0.0, 0.0, 1.0)
-        gradient.setColorAt(0.00, QColor(191, 224, 255, 255))  # #bfe0ff
-        gradient.setColorAt(0.50, QColor(198, 226, 255, 252))
-        gradient.setColorAt(0.68, QColor(214, 236, 255, 240))
-        gradient.setColorAt(0.82, QColor(230, 242, 255, 215))
-        gradient.setColorAt(0.91, QColor(245, 250, 255, 70))
-        gradient.setColorAt(0.97, QColor(255, 255, 255, 20))
-        gradient.setColorAt(1.00, QColor(255, 255, 255, 0))
+        for stop, color in SPLASH_GLOW_STOPS:
+            gradient.setColorAt(stop, color)
 
         painter.setPen(Qt.NoPen)
         painter.setBrush(QBrush(gradient))
