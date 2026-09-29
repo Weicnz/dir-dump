@@ -7,15 +7,6 @@ from typing import Any
 
 from .base import DirectoryItem, DirectoryStrategy
 
-COMMON_DIRS = [
-    ("Desktop", pathlib.Path.home() / "Desktop"),
-    ("Documents", pathlib.Path.home() / "Documents"),
-    ("Downloads", pathlib.Path.home() / "Downloads"),
-    ("Pictures", pathlib.Path.home() / "Pictures"),
-    ("Music", pathlib.Path.home() / "Music"),
-    ("Videos", pathlib.Path.home() / "Videos"),
-]
-
 
 class CurrentDirStrategy(DirectoryStrategy):
     @property
@@ -39,50 +30,78 @@ class CurrentDirStrategy(DirectoryStrategy):
             seen.add(norm)
             items.append(item)
 
-        recent_days = max(1, int(config.get("recent_days", 5)))
-        cutoff = time.time() - recent_days * 86400
+        # 统计每个目录的历史打开频次（同路径取最大次数，路径保留原始写法）
         history = config.get("history", [])
-
-        history_by_path: dict[str, float] = {}
+        freq: dict[str, tuple[int, float, str]] = {}
         for entry in history:
             p = entry.get("path", "")
-            t = float(entry.get("time", 0))
-            if p:
-                history_by_path[os.path.normcase(os.path.normpath(p))] = t
+            if not p:
+                continue
+            norm = os.path.normcase(os.path.normpath(p))
+            count = int(entry.get("count", 1) or 1)
+            t = float(entry.get("time", 0) or 0)
+            prev = freq.get(norm)
+            if prev is None or count > prev[0] or (count == prev[0] and t > prev[1]):
+                freq[norm] = (count, t, p)
 
         if config.get("include_parent", True) and current_dir:
             parent = pathlib.Path(current_dir).parent
             if str(parent) != str(current_dir):
                 add(DirectoryItem(name="..", path=str(parent), category="parent"))
 
-        if config.get("include_recent_subdirs", True) and current_dir:
-            max_recent = int(config.get("max_recent_subdirs", 8))
-            scored: list[tuple[float, pathlib.Path]] = []
-            try:
-                for child in pathlib.Path(current_dir).iterdir():
-                    if not child.is_dir():
-                        continue
-                    norm = os.path.normcase(os.path.normpath(str(child)))
-                    last_used = history_by_path.get(norm, 0.0)
-                    try:
-                        mtime = child.stat().st_mtime
-                    except OSError:
-                        mtime = 0.0
-                    score = max(last_used, mtime)
-                    if score >= cutoff or last_used > 0:
-                        scored.append((score, child))
-            except OSError:
-                scored = []
-            scored.sort(key=lambda x: x[0], reverse=True)
-            for _, sub in scored[:max_recent]:
+        cur_norm = ""
+        prefix = ""
+        if current_dir:
+            cur_norm = os.path.normcase(os.path.normpath(current_dir))
+            prefix = cur_norm if cur_norm.endswith(os.sep) else cur_norm + os.sep
+
+        # 推荐当前目录下的“深层子目录”（层级 >= 2）：直接子目录在当前目录中已可见，故排除
+        if config.get("include_frequent_dirs", True) and current_dir:
+            max_dirs = int(config.get("max_frequent_dirs", 8))
+            candidates: list[tuple[int, float, str]] = []
+            for norm, (count, t, orig) in freq.items():
+                if norm == cur_norm or not norm.startswith(prefix):
+                    continue
+                if os.sep not in norm[len(prefix):]:
+                    continue  # 直接子目录，不再推荐
+                if not os.path.isdir(orig):
+                    continue
+                candidates.append((count, t, orig))
+            candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+            for _count, _t, orig in candidates[:max_dirs]:
                 add(
                     DirectoryItem(
-                        name=sub.name, path=str(sub), category="recent"
+                        name=os.path.basename(os.path.normpath(orig)),
+                        path=orig,
+                        category="frequent",
                     )
                 )
 
-        if config.get("include_siblings", True) and current_dir:
+        # 补充推荐：不在当前目录下的历史高频目录，按访问频次排序
+        if config.get("include_global_dirs", True) and current_dir:
+            max_global = int(config.get("max_global_dirs", 4))
+            if max_global > 0:
+                global_candidates: list[tuple[int, float, str]] = []
+                for norm, (count, t, orig) in freq.items():
+                    if norm == cur_norm or norm.startswith(prefix):
+                        continue
+                    if not os.path.isdir(orig):
+                        continue
+                    global_candidates.append((count, t, orig))
+                global_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                for _count, _t, orig in global_candidates[:max_global]:
+                    add(
+                        DirectoryItem(
+                            name=os.path.basename(os.path.normpath(orig)),
+                            path=orig,
+                            category="global",
+                        )
+                    )
+
+        if config.get("include_siblings", False) and current_dir:
             max_siblings = int(config.get("max_siblings", 3))
+            recent_days = max(1, int(config.get("recent_days", 5)))
+            cutoff = time.time() - recent_days * 86400
             parent = pathlib.Path(current_dir).parent
             scored: list[tuple[float, pathlib.Path]] = []
             try:
@@ -90,7 +109,7 @@ class CurrentDirStrategy(DirectoryStrategy):
                     if not child.is_dir() or str(child) == str(current_dir):
                         continue
                     norm = os.path.normcase(os.path.normpath(str(child)))
-                    last_used = history_by_path.get(norm, 0.0)
+                    last_used = freq.get(norm, (0, 0.0, ""))[1]
                     try:
                         mtime = child.stat().st_mtime
                     except OSError:
@@ -104,16 +123,31 @@ class CurrentDirStrategy(DirectoryStrategy):
             for _, sib in scored[:max_siblings]:
                 add(DirectoryItem(name=sib.name, path=str(sib), category="sibling"))
 
-        if config.get("include_common_dirs", True):
-            for name, path in COMMON_DIRS:
-                if path.exists():
-                    add(DirectoryItem(name=name, path=str(path), category="common"))
-
         if config.get("include_favorites", True):
             for fav in config.get("favorites", []):
                 name = fav.get("name", "")
                 path = fav.get("path", "")
                 if name and path:
-                    add(DirectoryItem(name=name, path=path, category="favorite"))
+                    add(
+                        DirectoryItem(
+                            name=name,
+                            path=path,
+                            category="favorite",
+                            icon=fav.get("icon"),
+                            color=fav.get("color"),
+                        )
+                    )
+
+        # 应用“自动识别路径”的自定义样式（颜色/图案），不覆盖已有的手动设置
+        styles = config.get("path_styles") or {}
+        if styles:
+            for item in items:
+                style = styles.get(os.path.normcase(os.path.normpath(item.path)))
+                if not style:
+                    continue
+                if not item.color:
+                    item.color = style.get("color")
+                if not item.icon:
+                    item.icon = style.get("icon")
 
         return items

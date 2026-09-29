@@ -1,5 +1,7 @@
-﻿strategies/__pycache__
+strategies/__pycache__
 utils/__pycache__
 ui/__pycache__
 config/__pycache__
 __pycache__
+build/
+dist/

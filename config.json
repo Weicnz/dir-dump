@@ -2,32 +2,23 @@
   "strategies": {
     "current_dir": {
       "enabled": true,
-      "include_parent": true,
-      "include_siblings": true,
-      "include_recent_subdirs": true,
-      "include_common_dirs": true,
+      "include_parent": false,
+      "include_siblings": false,
+      "include_frequent_dirs": true,
+      "include_global_dirs": true,
       "include_favorites": true,
       "recent_days": 5,
       "max_siblings": 8,
-      "max_recent_subdirs": 6
+      "max_frequent_dirs": 8,
+      "max_global_dirs": 4
     }
   },
   "favorites": [
     {
-      "name": "Desktop",
-      "path": "C:\\Users\\Administrator\\Desktop"
-    },
-    {
-      "name": "Documents",
-      "path": "C:\\Users\\Administrator\\Documents"
-    },
-    {
-      "name": "Downloads",
-      "path": "C:\\Users\\Administrator\\Downloads"
-    },
-    {
-      "name": "Pictures",
-      "path": "C:\\Users\\Administrator\\Pictures"
+      "name": "config",
+      "path": "E:\\pj-self\\Code\\dir-dump\\config",
+      "color": null,
+      "icon": null
     }
   ],
   "wheel": {
@@ -36,8 +27,114 @@
   },
   "history": [
     {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Master_SW\\01_software\\CC2745M_MCU_APP\\polyspace_analysis",
+      "time": 1790593290.6126487,
+      "count": 1
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Master_SW",
+      "time": 1790593279.4235873,
+      "count": 24
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Anchor_SW\\01_software\\CC2745A_MCU_APP\\source\\bsw\\service\\Com\\Tool",
+      "time": 1790587747.2607198,
+      "count": 5
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Anchor_SW\\01_software\\CC2745A_MCU_APP",
+      "time": 1790587744.913264,
+      "count": 7
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Anchor_SW",
+      "time": 1790586801.04783,
+      "count": 11
+    },
+    {
+      "path": "D:\\Beyond Compare 4破解版",
+      "time": 1790586679.5301638,
+      "count": 8
+    },
+    {
+      "path": "E:\\pj-MCU\\Code\\UWB_AC7842_SW_ARC\\01_software\\AC78438M_MCU_APP\\bsw\\service\\Com\\Tool",
+      "time": 1790585103.244097,
+      "count": 1
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Anchor_SW\\01_software\\CC2745A_MCU_APP\\source\\bsw\\service\\Com",
+      "time": 1790585023.621764,
+      "count": 5
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Master_SW\\01_software\\CC2745M_MCU_APP",
+      "time": 1790584774.697601,
+      "count": 10
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Anchor_SW\\01_software\\CC2745A_MCU_APP\\polyspace_analysis",
+      "time": 1790581776.4702966,
+      "count": 2
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Anchor_SW\\01_software",
+      "time": 1790581765.602897,
+      "count": 4
+    },
+    {
+      "path": "E:\\",
+      "time": 1790577692.881652,
+      "count": 20
+    },
+    {
+      "path": "D:\\",
+      "time": 1790567571.1628954,
+      "count": 4
+    },
+    {
+      "path": "E:\\pj-BLE",
+      "time": 1790567518.6749961,
+      "count": 1
+    },
+    {
+      "path": "E:\\pj-BLE\\Code",
+      "time": 1790567360.7601907,
+      "count": 2
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Master_SW\\01_software",
+      "time": 1790567084.7886856,
+      "count": 5
+    },
+    {
+      "path": "E:\\pj-BLE\\Code\\UWB_CC2745_Master_SW\\01_software\\CC2745_M_Burn_OTA_File_Output",
+      "time": 1790562540.7688534,
+      "count": 1
+    },
+    {
+      "path": "E:\\pj-self\\Code\\dir-dump",
+      "time": 1790562501.3679333,
+      "count": 2
+    },
+    {
+      "path": "E:\\pj-self\\Code",
+      "time": 1790562382.6842635,
+      "count": 3
+    },
+    {
       "path": "D:\\Work",
-      "time": 1790398069.2121434
+      "time": 1790398069.2121434,
+      "count": 1
     }
-  ]
+  ],
+  "path_styles": {
+    "e:\\pj-ble\\code\\uwb_cc2745_master_sw\\01_software\\cc2745m_mcu_app": {
+      "color": null,
+      "icon": "dot.svg"
+    },
+    "e:\\pj-ble\\code\\uwb_cc2745_anchor_sw\\01_software\\cc2745a_mcu_app": {
+      "color": null,
+      "icon": "triangle.svg"
+    }
+  }
 }

@@ -11,6 +11,7 @@ class DirectoryItem:
     path: str
     category: str = "other"
     icon: str | None = None
+    color: str | None = None
 
 
 class DirectoryStrategy(ABC):

@@ -6,7 +6,7 @@ from ctypes import wintypes
 
 import pythoncom
 from PySide6.QtCore import QObject, QPoint, QThread, QTimer, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QCursor
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 
 from config.config_manager import ConfigManager
@@ -158,6 +158,9 @@ class WheelController(QObject):
             self.hide_wheel()
 
         current_dir = get_active_explorer_path()
+        if current_dir:
+            # 记录当前访问的目录，作为后续按频次推荐的数据来源
+            self._config.add_history(current_dir)
         items: list = []
         for strategy in self._registry.all():
             cfg = self._config.get_strategy(strategy.name)
@@ -166,11 +169,8 @@ class WheelController(QObject):
             cfg_with_favs = dict(cfg)
             cfg_with_favs["favorites"] = self._config.get_favorites()
             cfg_with_favs["history"] = self._config.get_history()
+            cfg_with_favs["path_styles"] = self._config.get_path_styles()
             items.extend(strategy.get_recommendations(current_dir, cfg_with_favs))
-
-        if not items:
-            self._active = False
-            return
 
         self._wheel = WheelMenu(
             items=items[:12],
@@ -244,23 +244,28 @@ class App(QApplication):
         return tray
 
     def _on_right_down(self, x: int, y: int) -> None:
-        QTimer.singleShot(0, lambda: self._show_wheel_safe(x, y))
+        QTimer.singleShot(0, self._show_wheel_at_cursor)
 
-    def _show_wheel_safe(self, x: int, y: int) -> None:
+    def _show_wheel_at_cursor(self) -> None:
+        # 钩子返回的是物理像素坐标，需转换为 Qt 的逻辑坐标，
+        # 否则在缩放不是 100% 的屏幕上轮盘会偏移、且命中区域与显示区域不重合。
+        pos = QCursor.pos()
         try:
-            self._controller.show_wheel(x, y)
+            self._controller.show_wheel(pos.x(), pos.y())
         except Exception as e:
             print(f"[wheel] show error: {e}")
 
     def _on_right_up(self, x: int, y: int) -> None:
         def _do() -> None:
-            selected = self._controller.commit_and_hide(x, y)
+            pos = QCursor.pos()
+            selected = self._controller.commit_and_hide(pos.x(), pos.y())
             if not selected:
                 self._hook.reinject_right_click(x, y)
         QTimer.singleShot(0, _do)
 
     def _on_mouse_move(self, x: int, y: int) -> None:
-        self._controller.update_highlight(x, y)
+        pos = QCursor.pos()
+        self._controller.update_highlight(pos.x(), pos.y())
 
     def _open_settings(self) -> None:
         strategies = self._controller._registry.all()
